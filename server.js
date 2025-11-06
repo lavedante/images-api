@@ -9,7 +9,11 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-app.use(cors());
+// CORS configuration - allow requests from production domain
+app.use(cors({
+  origin: ['https://sitesorbit.io', 'null'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Health check endpoint
