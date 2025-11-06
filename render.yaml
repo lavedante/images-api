@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: sitesorbit-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: AI_IMAGE_API_URL
+        value: https://sitesorbit-image-api.power-mvs.workers.dev/
+      # Add these in Render dashboard:
+      # UNSPLASH_ACCESS_KEY
+      # UNSPLASH_SECRET_KEY
+      # UNSPLASH_APP_ID
+      # PEXELS_KEY
+      # PIXABAY_KEY
+      # AI_IMAGE_API_TOKEN
+
