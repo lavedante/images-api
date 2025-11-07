@@ -14,7 +14,9 @@ app.use(cors({
   origin: ['https://sitesorbit.io', 'null'],
   credentials: true
 }));
-app.use(express.json());
+// Increase body size limit to handle large base64 images (50MB)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -39,16 +41,25 @@ app.get('/api/unsplash/search', async (req, res) => {
     
     res.json({
       success: true,
-      results: response.data.results.map(photo => ({
-        id: photo.id,
-        url: photo.urls.regular,
-        thumb: photo.urls.thumb,
-        full: photo.urls.full,
-        alt: photo.alt_description || photo.description || 'Unsplash image',
-        link: photo.links.html,
-        photographer: photo.user.name,
-        photographerUrl: photo.user.links.html
-      })),
+      results: response.data.results.map(photo => {
+        // Create resized URL with max 800x800 dimensions
+        // Using raw URL with fit=max to maintain aspect ratio while limiting size
+        const rawUrl = photo.urls.raw;
+        const resizedUrl = rawUrl.includes('?') 
+          ? `${rawUrl}&w=800&h=600&fit=max`
+          : `${rawUrl}?w=800&h=600&fit=max`;
+        
+        return {
+          id: photo.id,
+          url: resizedUrl,
+          thumb: photo.urls.thumb,
+          full: resizedUrl, // Use resized for full as well to limit size
+          alt: photo.alt_description || photo.description || 'Unsplash image',
+          link: photo.links.html,
+          photographer: photo.user.name,
+          photographerUrl: photo.user.links.html
+        };
+      }),
       total: response.data.total,
       totalPages: response.data.total_pages
     });
@@ -167,6 +178,9 @@ app.get('/api/wikipedia/search', async (req, res) => {
         format: 'json',
         pilicense: 'free',
         origin: '*'
+      },
+      headers: {
+        'User-Agent': 'SitesOrbit/1.0 (https://sitesorbit.com; webmaster@sitesorbit.com)'
       }
     });
     
@@ -189,9 +203,13 @@ app.get('/api/wikipedia/search', async (req, res) => {
     res.json({ success: true, results });
   } catch (error) {
     console.error('Wikipedia API error:', error.response?.data || error.message);
+    const statusCode = error.response?.status || 500;
+    const errorMessage = error.response?.status === 403 
+      ? 'Wikipedia API requires a User-Agent header. Please contact the administrator.'
+      : error.response?.data?.error || error.message;
     res.status(500).json({ 
       error: 'Failed to fetch Wikipedia images',
-      details: error.message
+      details: errorMessage
     });
   }
 });
@@ -254,6 +272,55 @@ app.get('/api/ai-image/models', (req, res) => {
   });
 });
 
+// Upload image to imgBB
+app.post('/api/imgbb/upload', async (req, res) => {
+  const { imageData } = req.body;
+  
+  if (!imageData) {
+    return res.status(400).json({ error: 'Image data is required' });
+  }
+
+  try {
+    // Extract base64 data from data URL if needed
+    let base64Data = imageData;
+    if (imageData.startsWith('data:image/')) {
+      const base64Match = imageData.match(/^data:image\/\w+;base64,(.+)$/);
+      if (!base64Match) {
+        return res.status(400).json({ error: 'Invalid image data URL format' });
+      }
+      base64Data = base64Match[1];
+    }
+
+    // Upload to imgBB
+    const formData = new URLSearchParams();
+    formData.append('key', 'IMGBB_KEY_PLACEHOLDER');
+    formData.append('image', base64Data);
+    formData.append('expiration', '10800'); // 3 hours in seconds
+
+    const response = await axios.post('https://api.imgbb.com/1/upload', formData.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    if (response.data.success && response.data.data && response.data.data.url) {
+      res.json({
+        success: true,
+        url: response.data.data.url,
+        expiration: response.data.data.expiration
+      });
+    } else {
+      throw new Error('Invalid response from imgBB');
+    }
+  } catch (error) {
+    console.error('imgBB upload error:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to upload image to imgBB',
+      details: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -265,5 +332,6 @@ app.listen(PORT, () => {
   console.log(`   - GET  /api/pixabay/search?query=...`);
   console.log(`   - GET  /api/wikipedia/search?query=...`);
   console.log(`   - POST /api/ai-image/generate`);
+  console.log(`   - POST /api/imgbb/upload`);
 });
 
