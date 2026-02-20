@@ -696,7 +696,7 @@ app.post('/api/imgbb/upload', async (req, res) => {
 
     // Upload to imgBB
     const formData = new URLSearchParams();
-    formData.append('key', 'IMGBB_KEY_PLACEHOLDER');
+    formData.append('key', process.env.IMGBB_KEY);
     formData.append('image', base64Data);
     formData.append('expiration', '10800'); // 3 hours in seconds
 
